@@ -2,47 +2,30 @@
 
 WordPress abilities pack that extends [Dolly](https://wordpress.com), the WordPress.com AI agent, with new capabilities. Abilities run remotely on self-hosted WordPress sites through the Jetpack connection.
 
+Forked from [Automattic/dollypack](https://github.com/Automattic/dollypack) as a standalone single-plugin repo.
 
 ## Requirements
 
 - WordPress 6.9+
 - Jetpack connected to WordPress.com
 
-## Plugin packages
-
-Releases publish four installable plugin ZIPs:
-
-| Plugin | Contents | Dependency |
-|---|---|---|
-| `dollypack-core` | Shared runtime, settings UI, and `wp-remote-request`. | None |
-| `dollypack-github` | All GitHub abilities plus the GitHub service parent class. | `dollypack-core` |
-| `dollypack-google` | Google Calendar read plus the Google service parent class. | `dollypack-core` |
-| `dollypack-full` | Core + GitHub + Google in one standalone plugin. | None |
-
-Release assets are built from `config/packages.php` by `scripts/build-packages.php`. The repository root plugin mirrors the full bundle for development only and should not be installed alongside any packaged Dollypack plugin.
-
 ## Installation
 
-1. Download the plugin ZIP you want from the [GitHub Releases page](https://github.com/Automattic/dollypack/releases).
-2. Choose the package that matches your setup:
-   - `dollypack-full` for a single plugin with all Dollypack abilities.
-   - `dollypack-core` for the shared runtime and `wp-remote-request`.
-   - `dollypack-github` for GitHub abilities, which requires `dollypack-core`.
-   - `dollypack-google` for Google Calendar abilities, which requires `dollypack-core`.
-3. In WordPress admin, go to **Plugins > Add New Plugin > Upload Plugin** and upload the ZIP file.
-4. Activate the plugin after upload. If you are installing `dollypack-github` or `dollypack-google`, install and activate `dollypack-core` first.
-5. Confirm Jetpack is connected to WordPress.com, then configure Dollypack under **Settings > Dollypack**.
+1. Download or clone this repository.
+2. Copy or symlink the plugin directory into `wp-content/plugins/`.
+3. Activate **Dollypack Full** in WordPress admin.
+4. Confirm Jetpack is connected to WordPress.com, then configure under **Settings > Dollypack**.
 
 ## Current abilities
 
-| Ability ID | Package | Class | Description | Annotations |
-|---|---|---|---|---|
-| `wp-remote-request` | `dollypack-core` | `Dollypack_WP_Remote_Request` | Perform an HTTP request using `wp_remote_request()`. | `idempotent` |
-| `github-read` | `dollypack-github` | `Dollypack_GitHub_Read` | Read files, directory listings, and repository metadata from the GitHub API. | `readonly`, `idempotent` |
-| `github-notifications` | `dollypack-github` | `Dollypack_GitHub_Notifications` | List and manage GitHub notifications (list, mark-read). | `idempotent` |
-| `github-search` | `dollypack-github` | `Dollypack_GitHub_Search` | Search GitHub for code, issues, repositories, or commits. | `readonly`, `idempotent` |
-| `github-write` | `dollypack-github` | `Dollypack_GitHub_Write` | Create or update resources on GitHub — issues, comments, pull requests, etc. | `destructive` |
-| `google-calendar-read` | `dollypack-google` | `Dollypack_Google_Calendar_Read` | Read calendars and events from Google Calendar (list_calendars, list_events, get_event). | `readonly`, `idempotent` |
+| Ability ID | Class | Description | Annotations |
+|---|---|---|---|
+| `wp-remote-request` | `Dollypack_WP_Remote_Request` | Perform an HTTP request using `wp_remote_request()`. | `idempotent` |
+| `github-read` | `Dollypack_GitHub_Read` | Read files, directory listings, and repository metadata from the GitHub API. | `readonly`, `idempotent` |
+| `github-notifications` | `Dollypack_GitHub_Notifications` | List and manage GitHub notifications (list, mark-read). | `idempotent` |
+| `github-search` | `Dollypack_GitHub_Search` | Search GitHub for code, issues, repositories, or commits. | `readonly`, `idempotent` |
+| `github-write` | `Dollypack_GitHub_Write` | Create or update resources on GitHub — issues, comments, pull requests, etc. | `destructive` |
+| `google-calendar-read` | `Dollypack_Google_Calendar_Read` | Read calendars and events from Google Calendar (list_calendars, list_events, get_event). | `readonly`, `idempotent` |
 
 ## Adding a new ability
 
@@ -71,14 +54,7 @@ Dollypack_Ability (abstract)
 
 ### 3. Register the ability
 
-Register the ability with `Dollypack_Runtime` in the relevant package bootstrap:
-
-- `packages/core/bootstrap.php` for core abilities
-- `packages/github/bootstrap.php` for GitHub abilities
-- `packages/google/bootstrap.php` for Google abilities
-- `packages/full/bootstrap.php` for the standalone full bundle
-
-Use the plugin directory provided by the entrypoint, which is resolved with `plugin_dir_path( __FILE__ )`.
+Register the ability in `bootstrap.php`:
 
 ```php
 Dollypack_Runtime::register_ability(
@@ -90,13 +66,9 @@ Dollypack_Runtime::register_ability(
 );
 ```
 
-### 4. Add the ability to package manifests
+### 4. Update this README
 
-Update `config/packages.php` so the ability is bundled into the correct plugin ZIPs.
-
-### 5. Update this README
-
-Add a row to the abilities table above and note which package now contains it.
+Add a row to the abilities table above.
 
 ## Settings pattern
 
@@ -127,9 +99,8 @@ When adding a new service (e.g. Slack), create an abstract parent in `includes/`
 1. Extend `Dollypack_Ability`.
 2. Set a shared `$id` (e.g. `'slack'`), `$group_label`, and `$settings` for credentials.
 3. Add a helper method for authenticated API requests (like `github_request()`).
-4. Load the file from the relevant bootstrap(s).
-5. Add the parent class file to the appropriate module in `config/packages.php`.
-6. Have each concrete ability extend this parent.
+4. Load the file from `bootstrap.php`.
+5. Have each concrete ability extend this parent.
 
 ### OAuth settings pattern
 
@@ -144,42 +115,20 @@ For services requiring OAuth 2.0 (e.g. Google), the parent class handles the ful
 
 ## Design principles
 
-These rules apply when creating or modifying abilities:
-
 - **Each ability = a permission level.** Abilities are individually toggleable in the admin UI (Settings > Dollypack). Think of each one as a trust boundary.
 - **Prefer fewer, broader abilities over many narrow ones.** Combine endpoints that share the same trust level into one ability (e.g. all read-only GitHub API calls go into `github-read`).
 - **Split when risk differs.** Separate read from write, or when a user would reasonably want one without the other (e.g. `github-read` vs `github-write`).
 - **Use enums to constrain actions.** When a single ability supports multiple operations, use an `enum` in the input schema (e.g. `github-notifications` has `action: ['list', 'mark-read']`).
 - **Mark annotations accurately.** Set `readonly`, `destructive`, and `idempotent` to reflect what the ability actually does. These inform the agent's decision-making.
-- **Keep this file up to date.** This README is also `CLAUDE.md` and `AGENTS.md`. When you add or change an ability, update the abilities table and any relevant sections.
-
-## Packaging
-
-```bash
-# Build all release ZIPs into dist/
-php scripts/build-packages.php --all
-
-# Build with a specific version injected into plugin headers
-php scripts/build-packages.php --all --version 1.2.0
-
-# Build a single package
-php scripts/build-packages.php dollypack-core
-```
-
-- Package composition lives in `config/packages.php`, which defines modules (file groups) and packages (collections of modules). Module entries can be simple strings (source = destination) or arrays with explicit `source`/`destination` mappings for files that relocate into the package root (like bootstraps).
-- The build script resolves modules into file lists, copies them into `dist/{package}/`, injects the version into the plugin header, runs `php -l` on every PHP file, and creates the ZIP.
-- GitHub Actions publishes `dollypack-core.zip`, `dollypack-github.zip`, `dollypack-google.zip`, and `dollypack-full.zip` as release assets for `v*` tags, and injects the tag version into each plugin header.
-- Add-on plugins include a fallback admin notice with the releases URL if `dollypack-core` is missing.
-- There is no test suite, linter config, or dependency manager. The only automated check is `php -l` syntax linting during the build.
 
 ## Architecture
 
-The root `dollypack.php` is the development entrypoint — it acts as a full bundle and must not be installed alongside any packaged plugin. It loads `Dollypack_Package_Helper` to detect conflicts with packaged plugins, then delegates to `packages/full/bootstrap.php`.
-
-Each package has its own entrypoint (`packages/{name}/dollypack-{name}.php`) and bootstrap (`packages/{name}/bootstrap.php`). The core and full bootstraps load the runtime and register abilities directly. Add-on bootstraps (github, google) defer registration to `plugins_loaded` at priority 20 and call `Dollypack_Package_Helper::ensure_core_runtime()` to verify core is active first.
+`dollypack-full.php` is the plugin entrypoint. It delegates to `bootstrap.php`, which loads the runtime, settings UI, service parent classes, and registers all abilities.
 
 `Dollypack_Runtime` is a static singleton that manages the ability lifecycle:
 
 1. Abilities are registered via `register_ability($id, ['file' => ..., 'class' => ...])` — class files are lazy-loaded on first instantiation.
 2. On `wp_abilities_api_categories_init`, it registers the `dollypack` category.
 3. On `wp_abilities_api_init`, it instantiates all registered abilities, checks which are enabled via the `dollypack_enabled_abilities` option, verifies required settings are populated, and calls `register()` on each qualifying ability.
+
+There is no build system, test suite, or dependency manager. Edit the PHP files directly.
